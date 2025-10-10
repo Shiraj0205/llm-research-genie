@@ -5,7 +5,6 @@ import yaml
 
 def _project_root() -> Path:
     # .../utils/config_loader.py -> parents[1] == project root
-    print("Config Loader Invoked")
     return Path(__file__).resolve().parents[1]
 
 def load_config(config_path: str | None = None) -> dict:
