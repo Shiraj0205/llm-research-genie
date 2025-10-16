@@ -13,6 +13,7 @@ import asyncio
 
 class ApiKeyManager:
     def __init__(self):
+        load_dotenv()  # Load environment variables from .env file
         self.api_keys = {
             "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
             "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY"),
