@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import datetime
 from typing import List, Optional
+from exception.custom_exception import ResearchAnalystException
 from langgraph.types import Send
 
 from langgraph.graph import StateGraph, START, END
@@ -10,6 +11,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 from docx import Document
+from logger import GLOBAL_LOGGER
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -23,7 +25,8 @@ from research_and_analyst.backend_server.models import (
     Perspectives,
     GenerateAnalystsState,
     InterviewState,
-    ResearchGraphState
+    ResearchGraphState,
+    SearchQuery,
     )
 
 from research_and_analyst.utils.model_loader import ModelLoader
@@ -35,19 +38,78 @@ def build_interview_graph(llm, tavily_search=None):
     memory = MemorySaver()
 
     def generation_question(state: InterviewState):
-        pass
+        analyst = state["analyst"]
+        messages = state["messages"]
+
+        try:
+            system_prompt = ANALYST_ASK_QUESTIONS.render(goals=analyst.persona)
+            question = llm.invoke([SystemMessage(content=system_prompt)] + messages)
+            return {"messages": [question]}
+        except Exception as e:
+            raise ResearchAnalystException("Failed to generate analyst question", e)
+        
 
     def search_web(state: InterviewState):
-        pass
+        try:
+            structure_llm = llm.with_structured_output(SearchQuery)
+            search_query = structure_llm.invoke([GENERATE_SEARCH_QUERY] + state["messages"])
+
+            search_docs = tavily_search.invoke(search_query.search_query)
+
+            if not search_docs:
+                return {"context": ["[No search results found.]"]}
+
+            formatted = "\n\n---\n\n".join(
+                [
+                    f'<Document href="{doc.get("url", "#")}"/>\n{doc.get("content", "")}\n</Document>'
+                    for doc in search_docs
+                ]
+            )
+            return {"context": [formatted]}
+
+        except Exception as e:
+            raise ResearchAnalystException("Failed during web search execution", e)
+
 
     def generate_answer(state: InterviewState):
-        pass
+        analyst = state["analyst"]
+        messages = state["messages"]
+        context = state.get("context", ["[No context available.]"])
+
+        try:
+            system_prompt = GENERATE_ANSWERS.render(goals=analyst.persona, context=context)
+            answer = llm.invoke([SystemMessage(content=system_prompt)] + messages)
+            answer.name = "expert"
+            return {"messages": [answer]}
+
+        except Exception as e:
+            raise ResearchAnalystException("Failed to generate expert answer", e)
+
 
     def save_interview(state: InterviewState):
-        pass
+        try:
+            messages = state["messages"]
+            interview = get_buffer_string(messages)
+            return {"interview": interview}
+
+        except Exception as e:
+            raise ResearchAnalystException("Failed to save interview transcript", e)
+
 
     def write_section(state: InterviewState):
-        pass
+        context = state.get("context", ["[No context available.]"])
+        analyst = state["analyst"]
+
+        try:
+            system_prompt = WRITE_SECTION.render(focus=analyst.description)
+            section = llm.invoke(
+                [SystemMessage(content=system_prompt)]
+                + [HumanMessage(content=f"Use this source to write your section: {context}")]
+            )
+            return {"sections": [section.content]}
+
+        except Exception as e:
+            raise ResearchAnalystException("Failed to generate report section", e)
 
     interview_builder = StateGraph(InterviewState)
 
@@ -73,19 +135,33 @@ class ReportGenerator:
         self.llm = llm
         self.memory = MemorySaver()
         self.tavily_search = TavilySearchResults()
+        self.logger = GLOBAL_LOGGER.bind(module="ReportGenerator")
 
     
     def create_analyst(self, state: GenerateAnalystsState):
         """
         Create a set of AI analyst personas based on the research topic and any provided feedback.
         """
-        structured_llm = self.llm.with_structured_output(Perspectives)
-        analysts = structured_llm.invoke([
-            SystemMessage(content=CREATE_ANALYSTS_PROMPT),
-            HumanMessage(content="You are tasked with creating a team of research analysts to explore a given topic.")
-        ])
+        topic = state["topic"]
+        max_analysts = state["max_analysts"]
+        human_analyst_feedback = state.get("human_analyst_feedback", "")
 
-        return {analysts : analysts.analysts}
+        try:
+            self.logger.info("Creating analyst personas", topic=topic)
+            structured_llm = self.llm.with_structured_output(Perspectives)
+            system_prompt = CREATE_ANALYSTS_PROMPT.render(
+                topic=topic, max_analysts=max_analysts,
+                human_analyst_feedback=human_analyst_feedback,
+            )
+            analysts = structured_llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content="Generate the set of analysts."),
+            ])
+            self.logger.info("Analysts created", count=len(analysts.analysts))
+            return {"analysts": analysts.analysts}
+        except Exception as e:
+            self.logger.error("Error creating analysts", error=str(e))
+            raise ResearchAnalystException("Failed to create analysts", e)
 
 
     def human_feedback(self):
