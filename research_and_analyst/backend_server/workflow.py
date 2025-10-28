@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 from datetime import datetime
 from typing import List, Optional
 from exception.custom_exception import ResearchAnalystException
@@ -214,20 +215,162 @@ class ReportGenerator:
 
         return {"introduction": intro.content}
 
-    def write_conclusion(self):
-        pass
+    def write_conclusion(self, state: ResearchGraphState):
+        try:
+            sections = state["sections"]
+            topic = state["topic"]
+            formatted_str_sections = "\n\n".join([f"{s}" for s in sections])
+            system_prompt = INTRO_CONCLUSION_INSTRUCTIONS.render(
+                topic=topic, formatted_str_sections=formatted_str_sections
+            )
+            conclusion = self.llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content="Write the report conclusion")
+            ])
+            return {"conclusion": conclusion.content}
+        except Exception as e:
+            raise ResearchAnalystException("Failed to generate conclusion", e)
 
-    def finalize_report(self):
-        pass
+    def finalize_report(self, state: ResearchGraphState):
+        try:
+            content = state["content"]
+            self.logger.info("Finalizing report compilation")
+            if content.startswith("## Insights"):
+                content = content.strip("## Insights")
+
+            sources = None
+            if "## Sources" in content:
+                try:
+                    content, sources = content.split("\n## Sources\n")
+                except Exception:
+                    pass
+
+            final_report = (
+                state["introduction"] + "\n\n---\n\n" +
+                content + "\n\n---\n\n" +
+                state["conclusion"]
+            )
+            if sources:
+                final_report += "\n\n## Sources\n" + sources
+
+            return {"final_report": final_report}
+        except Exception as e:
+            raise ResearchAnalystException("Failed to finalize report", e)
+
 
     def save_report(self, final_report: str, topic: str, format: str = "docs", save_dir: Optional[str] = None):
-        pass
+
+        """
+        Save the final report to a file in the specified format (docx or pdf).
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_topic = re.sub(r'[\\/*?:"<>|]', "_", topic)
+        base_name = f"{safe_topic.replace(' ', '_')}_{timestamp}"
+
+        # Root folder (always inside project)
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+        root_dir = os.path.join(project_root, "generated_report")
+
+        # Create subfolder for this report
+        report_folder = os.path.join(root_dir, base_name)
+        os.makedirs(report_folder, exist_ok=True)
+
+
+        # Final file path inside that folder
+        file_path = os.path.join(report_folder, f"{base_name}.{format}")
+
+        if format == "docx":
+                self._save_as_docx(final_report, file_path)
+        elif format == "pdf":
+                self._save_as_pdf(final_report, file_path)
+        else:
+                raise ValueError("Invalid format. Use 'docx' or 'pdf'.")
+
+        return file_path
 
     def _save_as_pdf(self, text: str, file_path: str):
-        pass
+        from textwrap import wrap
+        try:
+            c = canvas.Canvas(file_path, pagesize=letter)
+            width, height = letter
+
+            # Margins and layout control
+            left_margin = 80
+            right_margin = 80
+            usable_width = width - left_margin - right_margin
+            top_margin = 70
+            bottom_margin = 60
+            y = height - top_margin
+
+            # Fonts and styles
+            normal_font = "Helvetica"
+            bold_font = "Helvetica-Bold"
+            line_height = 15
+
+            # Title centered at top
+            lines = text.split("\n")
+            for raw_line in lines:
+                line = raw_line.strip()
+                if not line:
+                    y -= line_height
+                    continue
+
+                # Detect headings
+                if line.startswith("# "):
+                    font = bold_font
+                    size = 16
+                    line = line[2:].strip()
+                elif line.startswith("## "):
+                    font = bold_font
+                    size = 13
+                    line = line[3:].strip()
+                else:
+                    font = normal_font
+                    size = 11
+
+                # Wrap text for readable width
+                c.setFont(font, size)
+                wrapped_lines = wrap(line, width=int(usable_width / (size * 0.55)))
+
+                for wline in wrapped_lines:
+                    # 🔹 Auto new page if near bottom
+                    if y < bottom_margin:
+                        c.showPage()
+                        c.setFont(font, size)
+                        y = height - top_margin
+
+                    # 🔹 Compute centered X position
+                    text_width = c.stringWidth(wline, font, size)
+                    x = (width - text_width) / 2  # center horizontally
+
+                    c.drawString(x, y, wline)
+                    y -= line_height
+
+            # Optional footer with page number
+            for page_num in range(1, c.getPageNumber() + 1):
+                c.setFont("Helvetica", 9)
+                c.drawCentredString(width / 2, 25, f"Page {page_num}")
+
+            c.save()
+
+        except Exception as e:
+            raise ResearchAnalystException("Error saving PDF report", e)
 
     def _save_as_docx(self, text: str, file_path: str):
-        pass
+        try:
+            doc = Document()
+            for line in text.split("\n"):
+                if line.startswith("# "):
+                    doc.add_heading(line[2:], level=1)
+                elif line.startswith("## "):
+                    doc.add_heading(line[3:], level=2)
+                elif line.startswith("### "):
+                    doc.add_heading(line[4:], level=3)
+                else:
+                    doc.add_paragraph(line)
+            doc.save(file_path)
+        except Exception as e:
+            raise ResearchAnalystException("Error saving DOCX report", e)
 
     def build_research_graph(self):
 
