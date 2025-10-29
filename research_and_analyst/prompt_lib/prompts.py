@@ -8,19 +8,15 @@ CREATE_ANALYSTS_PROMPT = """You are tasked with creating a set of AI analyst per
 1. First, review the research topic:
 {topic}
 
-2. Examine the analysts available from earlier conversations.{analysts}.
-Modify them if needed.
 
-3. Examine any editorial feedback that has been optionally provided to guide creation of the analysts: 
+2. Examine any editorial feedback that has been optionally provided to guide creation of the analysts: 
 {human_analyst_feedback}
 
-4. Determine the most interesting themes based upon documents and / or feedback above.
+3. Determine the most interesting themes based upon documents and / or feedback above.
 
-5. Pick the top {max_analysts} themes.
+4. Pick the top {max_analysts} themes.
 
-6. Assign one analyst to each theme.
-
-Provide output in this format strictly : {format_instructions}"""
+5. Assign one analyst to each theme."""
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt for Analyst to Ask Questions

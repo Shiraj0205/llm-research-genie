@@ -43,7 +43,7 @@ def build_interview_graph(llm, tavily_search=None):
         messages = state["messages"]
 
         try:
-            system_prompt = ANALYST_ASK_QUESTIONS.render(goals=analyst.persona)
+            system_prompt = ANALYST_ASK_QUESTIONS.format(goals=analyst.persona)
             question = llm.invoke([SystemMessage(content=system_prompt)] + messages)
             return {"messages": [question]}
         except Exception as e:
@@ -78,7 +78,7 @@ def build_interview_graph(llm, tavily_search=None):
         context = state.get("context", ["[No context available.]"])
 
         try:
-            system_prompt = GENERATE_ANSWERS.render(goals=analyst.persona, context=context)
+            system_prompt = GENERATE_ANSWERS.format(goals=analyst.persona, context=context)
             answer = llm.invoke([SystemMessage(content=system_prompt)] + messages)
             answer.name = "expert"
             return {"messages": [answer]}
@@ -102,7 +102,7 @@ def build_interview_graph(llm, tavily_search=None):
         analyst = state["analyst"]
 
         try:
-            system_prompt = WRITE_SECTION.render(focus=analyst.description)
+            system_prompt = WRITE_SECTION.format(focus=analyst.description)
             section = llm.invoke(
                 [SystemMessage(content=system_prompt)]
                 + [HumanMessage(content=f"Use this source to write your section: {context}")]
@@ -127,7 +127,7 @@ def build_interview_graph(llm, tavily_search=None):
     interview_builder.add_edge("save_interview","write_section")
     interview_builder.add_edge("write_section",END)
 
-    return interview_builder.build(checkpointer=memory)
+    return interview_builder.compile(checkpointer=memory)
 
 
 class ReportGenerator:
@@ -135,7 +135,9 @@ class ReportGenerator:
         load_dotenv()
         self.llm = llm
         self.memory = MemorySaver()
-        self.tavily_search = TavilySearchResults()
+        self.tavily_search = TavilySearchResults(
+            tavily_api_key="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"
+            )
         self.logger = GLOBAL_LOGGER.bind(module="ReportGenerator")
 
     
@@ -150,9 +152,11 @@ class ReportGenerator:
         try:
             self.logger.info("Creating analyst personas", topic=topic)
             structured_llm = self.llm.with_structured_output(Perspectives)
-            system_prompt = CREATE_ANALYSTS_PROMPT.render(
-                topic=topic, max_analysts=max_analysts,
+            system_prompt = CREATE_ANALYSTS_PROMPT.format(
+                topic=topic, 
+                max_analysts=max_analysts,
                 human_analyst_feedback=human_analyst_feedback,
+                analysts=""
             )
             analysts = structured_llm.invoke([
                 SystemMessage(content=system_prompt),
@@ -165,8 +169,9 @@ class ReportGenerator:
             raise ResearchAnalystException("Failed to create analysts", e)
 
 
-    def human_feedback(self):
-        pass
+    def human_feedback(self, state: ResearchGraphState):
+        """Process human feedback for the research process."""
+        return state
 
 
     def generate_report(self):
@@ -187,7 +192,7 @@ class ReportGenerator:
         formatted_str_sections = "\n\n".join([f"{section}" for section in sections])
         
         # Summarize the sections into a final report
-        system_prompt = REPORT_WRITER_INSTRUCTIONS.render(topic=topic)
+        system_prompt = REPORT_WRITER_INSTRUCTIONS.format(topic=topic)
         report = self.llm.invoke([
                 SystemMessage(content=system_prompt),
                 HumanMessage(content="\n\n".join(sections))
@@ -204,7 +209,7 @@ class ReportGenerator:
 
         formatted_str_sections = "\n\n".join([f"{s}" for s in sections])
 
-        system_prompt = INTRO_CONCLUSION_INSTRUCTIONS.render(
+        system_prompt = INTRO_CONCLUSION_INSTRUCTIONS.format(
                 topic=topic, formatted_str_sections=formatted_str_sections
                 )
         
@@ -220,7 +225,7 @@ class ReportGenerator:
             sections = state["sections"]
             topic = state["topic"]
             formatted_str_sections = "\n\n".join([f"{s}" for s in sections])
-            system_prompt = INTRO_CONCLUSION_INSTRUCTIONS.render(
+            system_prompt = INTRO_CONCLUSION_INSTRUCTIONS.format(
                 topic=topic, formatted_str_sections=formatted_str_sections
             )
             conclusion = self.llm.invoke([
@@ -400,7 +405,7 @@ class ReportGenerator:
 
         builder.add_node("create_analysts", self.create_analyst)
         builder.add_node("human_feedback", self.human_feedback)
-        builder.add_node("initiate_all_interviews", interview_graph)
+        builder.add_node("conduct_interview", interview_graph)
         builder.add_node("write_report", self.write_report)
         builder.add_node("write_introduction", self.write_introduction)
         builder.add_node("write_conclusion", self.write_conclusion)
@@ -416,14 +421,13 @@ class ReportGenerator:
         builder.add_edge(["write_conclusion", "write_report", "write_introduction"], "finalize_report")
         builder.add_edge("finalize_report", END)
 
-        return builder.build()
+        graph = builder.compile(interrupt_before=["human_feedback"], checkpointer=self.memory)
+        return graph
 
 
 if __name__ == "__main__":
-    model_loader = ModelLoader()
-    llm = model_loader.load_llm()
-    llm.invoke("hello")
 
+    llm = ModelLoader().load_llm()
     report_generator = ReportGenerator(llm)
     graph = report_generator.build_research_graph()
 
