@@ -1,34 +1,60 @@
-# prompts.py
+# ==============================================================================
+# 📘 Jinja2-based Prompt Templates for Autonomous Research Report Generator
+# ==============================================================================
+# Author: Sunny Savita
+# Description: These prompt templates use Jinja2 syntax ({{ ... }}, {% if ... %})
+# to dynamically render variables and handle missing values gracefully.
+# ==============================================================================
+
+from jinja2 import Environment, BaseLoader
+
+# Create reusable Jinja environment
+jinja_env = Environment(loader=BaseLoader())
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt to generate analysts based on topic, feedback, and existing analysts
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-CREATE_ANALYSTS_PROMPT = """You are tasked with creating a set of AI analyst personas. Follow these instructions carefully:
+CREATE_ANALYSTS_PROMPT = jinja_env.from_string("""
+You are tasked with creating a set of AI analyst personas. Follow these instructions carefully:
 
 1. First, review the research topic:
-{topic}
-
-
+{% if topic %}
+{{ topic }}
+{% else %}
+[No topic provided — focus on a generic research area relevant to AI analysis.]
+{% endif %}
+        
 2. Examine any editorial feedback that has been optionally provided to guide creation of the analysts: 
-{human_analyst_feedback}
-
+{% if human_analyst_feedback %}
+{{ human_analyst_feedback }}
+{% else %}
+[No feedback given — use your discretion to create diverse analyst perspectives.]
+{% endif %}
+    
 3. Determine the most interesting themes based upon documents and / or feedback above.
+                    
+4. Pick the top {{ max_analysts | default(3) }} themes.
 
-4. Pick the top {max_analysts} themes.
-
-5. Assign one analyst to each theme."""
+5. Assign one analyst to each theme.
+""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt for Analyst to Ask Questions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-ANALYST_ASK_QUESTIONS = """You are an analyst tasked with interviewing an expert to learn about a specific topic. 
+ANALYST_ASK_QUESTIONS = jinja_env.from_string("""
+You are an analyst tasked with interviewing an expert to learn about a specific topic. 
 
 Your goal is to boil down to interesting and specific insights related to your topic.
 
 1. Interesting: Insights that people will find surprising or non-obvious.
 2. Specific: Insights that avoid generalities and include specific examples from the expert.
 
-Here is your topic of focus and set of goals: {goals}
+Here is your topic of focus and set of goals:
+{% if goals %}
+{{ goals }}
+{% else %}
+[No specific goals provided — assume a general AI research analyst perspective.]
+{% endif %}
 
 Begin by introducing yourself using a name that fits your persona, and then ask your question.
 
@@ -38,36 +64,41 @@ When you are satisfied with your understanding, complete the interview with: "Th
 
 Remember to stay in character throughout your response, reflecting the persona and goals provided to you.
 
-Refer to the expert as expert, he doesn't have a name."""
+Refer to the expert as expert, he doesn't have a name.
+""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt to Generate Search Query from Conversation
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-GENERATE_SEARCH_QUERY = """You will be given a conversation between an analyst and an expert. 
-
-Your goal is to generate a well-structured query for use in retrieval and / or web-search related to the conversation.
-
+GENERATE_SEARCH_QUERY = jinja_env.from_string("""
+You will be given a conversation between an analyst and an expert. 
+Your goal is to generate a well-structured query for use in retrieval and / or web-search related to the conversation. 
 First, analyze the full conversation.
-
 Pay particular attention to the final question posed by the analyst.
-
-Convert this final question into a well-structured web search query
-
-conversation: {conversation}
-
-provide output strictly in this format: {format_instructions}"""
+Convert this final question into a well-structured web search query.
+""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt for Expert to Generate Answers
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-GENERATE_ANSWERS = """You are an expert being interviewed by an analyst.
+GENERATE_ANSWERS = jinja_env.from_string("""
+You are an expert being interviewed by an analyst.
 
-Here is analyst area of focus: {goals}. 
+Here is analyst area of focus:
+{% if goals %}
+{{ goals }}
+{% else %}
+[No goals provided — assume a general technical expert.]
+{% endif %}
 
 Your goal is to answer a question posed by the interviewer.
 
 To answer the question, use this context:
-{context}
+{% if context %}
+{{ context }}
+{% else %}
+[No context provided — answer generally using your expertise.]
+{% endif %}
 
 When answering questions, follow these guidelines:
 
@@ -79,12 +110,14 @@ When answering questions, follow these guidelines:
 6. If the source is: <Document source="assistant/docs/llama3_1.pdf" page="7"/> then just list:
    [1] assistant/docs/llama3_1.pdf, page 7 
 
-Start your answers with: Expert : """
+Start your answers with: Expert :
+""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt to Write a Report Section
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-WRITE_SECTION = """You are an expert technical writer. 
+WRITE_SECTION = jinja_env.from_string("""
+You are an expert technical writer. 
 Your task is to create a short, easily digestible section of a report based on a set of source documents.
 
 1. Analyze the content of the source documents: 
@@ -100,7 +133,11 @@ b. Summary (### header)
 c. Sources (### header)
 
 4. Make your title engaging based upon the focus area of the analyst: 
-{focus}
+{% if focus %}
+{{ focus }}
+{% else %}
+[No focus specified — write a general research insight section.]
+{% endif %}
 
 5. For the summary section:
 - Set up summary with general background / context related to the focus area of the analyst
@@ -130,14 +167,19 @@ There should be no redundant sources. It should simply be:
 - Ensure the report follows the required structure
 - Include no preamble before the title of the report
 - Check that all guidelines have been followed
-"""
+""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt to Consolidate All Sections into a Full Report
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-REPORT_WRITER_INSTRUCTIONS = """You are a technical writer creating a report on this overall topic: 
+REPORT_WRITER_INSTRUCTIONS = jinja_env.from_string("""
+You are a technical writer creating a report on this overall topic: 
 
-{topic}
+{% if topic %}
+{{ topic }}
+{% else %}
+[Topic unspecified — create a generalized AI research summary.]
+{% endif %}
 
 You have a team of analysts. Each analyst has done two things: 
 1. They conducted an interview with an expert on a specific sub-topic.
@@ -164,12 +206,18 @@ To format your report:
 Example:
 [1] Source 1  
 [2] Source 2  
-"""
+""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Prompt to Write Introduction or Conclusion
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-INTRO_CONCLUSION_INSTRUCTIONS = """You are a technical writer finishing a report on {topic}
+INTRO_CONCLUSION_INSTRUCTIONS = jinja_env.from_string("""
+You are a technical writer finishing a report on 
+{% if topic %}
+{{ topic }}
+{% else %}
+[General topic — AI Research]
+{% endif %}
 
 You will be given all of the sections of the report.
 
@@ -190,4 +238,10 @@ For your introduction:
 For your conclusion:
 - Use ## Conclusion as the section header.
 
-Here are the sections to reflect on for writing: {formatted_str_sections}"""
+Here are the sections to reflect on for writing:
+{% if formatted_str_sections %}
+{{ formatted_str_sections }}
+{% else %}
+[No sections provided — summarize the overall theme instead.]
+{% endif %}
+""")
