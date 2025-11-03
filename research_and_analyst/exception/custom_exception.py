@@ -3,12 +3,6 @@ import traceback
 from typing import Optional, cast
 
 class ResearchAnalystException(Exception):
-    """Custom exception for research and analyst operations, capturing detailed context.
-    Captures:
-    - Error message
-    - File name and line number where the error occurred
-    - Full traceback for debugging
-    """
     def __init__(self, error_message, error_details: Optional[object] = None):
         # Normalize message
         if isinstance(error_message, BaseException):
@@ -47,7 +41,6 @@ class ResearchAnalystException(Exception):
         super().__init__(self.__str__())
 
     def __str__(self):
-        """String representation of the exception."""
         # Compact, logger-friendly message (no leading spaces)
         base = f"Error in [{self.file_name}] at line [{self.lineno}] | Message: {self.error_message}"
         if self.traceback_str:
@@ -55,7 +48,6 @@ class ResearchAnalystException(Exception):
         return base
 
     def __repr__(self):
-        """Detailed representation for debugging."""
         return f"ResearchAnalystException(file={self.file_name!r}, line={self.lineno}, message={self.error_message!r})"
 
 
@@ -66,8 +58,8 @@ class ResearchAnalystException(Exception):
 #     except Exception as e:
 #         raise ResearchAnalystException("Division failed", e) from e
 
-    # Demo-2: still supports sys (old pattern)
-    # try:
-    #     a = int("abc")
-    # except Exception as e:
-    #     raise ResearchAnalystException(e, sys)
+#     # Demo-2: still supports sys (old pattern)
+#     # try:
+#     #     a = int("abc")
+#     # except Exception as e:
+#     #     raise ResearchAnalystException(e, sys)

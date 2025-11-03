@@ -13,8 +13,8 @@ class ReportService:
     def __init__(self):
         self.llm = ModelLoader().load_llm()
         self.reporter = AutonomousReportGenerator(self.llm)
-        self.graph = self.reporter.build_graph()
         self.reporter.memory = _shared_memory 
+        self.graph = self.reporter.build_graph()
         self.logger = GLOBAL_LOGGER.bind(module="ReportService")
 
     def start_report_generation(self, topic: str, max_analysts: int):
